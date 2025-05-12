@@ -1,7 +1,9 @@
+// src/components/DailyInput.tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react"; // Changed from react-dom
+import { useFormStatus } from "react-dom"; // useFormStatus remains in react-dom
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -29,7 +31,7 @@ function SubmitButton() {
 export function DailyInput() {
   const [todaysEntry, setTodaysEntry] = useState<JournalEntry | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [formState, formAction] = useFormState(addEntry, initialState);
+  const [formState, formAction] = useActionState(addEntry, initialState); // Changed useFormState to useActionState
   const { toast } = useToast();
 
   const today = new Date();
