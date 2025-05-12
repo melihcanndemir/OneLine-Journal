@@ -36,5 +36,3 @@ export function ThemeToggle() {
     </DropdownMenu>
   );
 }
-
-//

@@ -21,5 +21,3 @@ export function EntryCard({ entry }: EntryCardProps) {
     </Card>
   );
 }
-
-//
