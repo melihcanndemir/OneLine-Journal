@@ -2,72 +2,73 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useActionState } from "react"; // Changed from react-dom
-import { useFormStatus } from "react-dom"; // useFormStatus remains in react-dom
-import { format } from "date-fns";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { addEntry, FormState, getTodaysEntry } from "@/lib/actions";
+import { format, startOfDay } from "date-fns";
+import { Button } from "@/components/ui/button";
 import type { JournalEntry } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { Textarea } from "@/components/ui/textarea"; // Using Textarea for potentially longer sentences
-
-const initialState: FormState = {
-  message: "",
-  errors: {},
-  success: false,
-};
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending} className="w-full sm:w-auto">
-      {pending ? "Saving..." : "Save Sentence"}
-    </Button>
-  );
-}
+import { Textarea } from "@/components/ui/textarea";
+import { saveEntryToLocalStorage, getTodaysEntryFromLocalStorage } from "../lib/localstorage";
 
 export function DailyInput() {
   const [todaysEntry, setTodaysEntry] = useState<JournalEntry | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [formState, formAction] = useActionState(addEntry, initialState); // Changed useFormState to useActionState
+  const [sentence, setSentence] = useState('');
+  const [formattedDate, setFormattedDate] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const today = new Date();
-  const formattedDate = format(today, "MMMM d, yyyy");
-
   useEffect(() => {
-    async function fetchEntry() {
+    async function fetchEntryAndSetDate() {
       setIsLoading(true);
-      const entry = await getTodaysEntry();
+      const today = new Date();
+      setFormattedDate(format(today, "MMMM d, yyyy"));
+
+      const entry = getTodaysEntryFromLocalStorage();
       setTodaysEntry(entry);
       setIsLoading(false);
     }
-    fetchEntry();
+    fetchEntryAndSetDate();
   }, []);
 
-  useEffect(() => {
-    if (formState.message && !formState.success && formState.errors?._form) {
-       toast({
-        title: "Error",
-        description: formState.errors._form.join(", "),
-        variant: "destructive",
-      });
+  const handleSaveSentence = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setError(null);
+
+    const today = new Date();
+    const newEntry: JournalEntry = {
+      id: Date.now().toString(),
+      date: format(startOfDay(today), 'yyyy-MM-dd'),
+      sentence: sentence.trim(),
+      userId: 'mockUser',
+    };
+
+    if (newEntry.sentence.length === 0) {
+      setError("Sentence cannot be empty.");
+      setIsSaving(false);
+      return;
     }
-    if (formState.success && formState.message) {
+
+    try {
+      saveEntryToLocalStorage(newEntry);
+      setTodaysEntry(newEntry);
       toast({
         title: "Success",
-        description: formState.message,
+        description: "Entry saved successfully!",
       });
-      if (formState.entry) {
-        setTodaysEntry(formState.entry);
-      }
-      // Reset form or relevant states if needed, e.g. by clearing the input.
-      // Next.js router.refresh() can also be used if form is not part of this component state
-      // For this simple form, once submitted and entry exists, it becomes read-only.
+    } catch (e) {
+      setError("Failed to save entry.");
+      toast({
+        title: "Error",
+        description: "Failed to save entry.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
-  }, [formState, toast]);
+  };
 
   if (isLoading) {
     return (
@@ -105,7 +106,7 @@ export function DailyInput() {
 
   return (
     <Card className="w-full max-w-lg mx-auto shadow-lg">
-      <form action={formAction}>
+      <form onSubmit={handleSaveSentence}>
         <CardHeader>
           <CardTitle>Today's Entry: {formattedDate}</CardTitle>
           <CardDescription>Capture your single thought for today. Once saved, it cannot be changed.</CardDescription>
@@ -117,16 +118,17 @@ export function DailyInput() {
             className="min-h-[100px] text-base resize-none"
             aria-label="Today's sentence"
             required
+            value={sentence}
+            onChange={(e) => setSentence(e.target.value)}
           />
-          {formState.errors?.sentence && (
-            <p className="text-sm text-destructive">{formState.errors.sentence.join(", ")}</p>
-          )}
-          {formState.errors?._form && (
-             <p className="text-sm text-destructive">{formState.errors._form.join(", ")}</p>
+          {error && (
+             <p className="text-sm text-destructive">{error}</p>
           )}
         </CardContent>
         <CardFooter className="flex justify-end">
-          <SubmitButton />
+          <Button type="submit" disabled={isSaving} className="w-full sm:w-auto">
+            {isSaving ? "Saving..." : "Save Sentence"}
+          </Button>
         </CardFooter>
       </form>
     </Card>

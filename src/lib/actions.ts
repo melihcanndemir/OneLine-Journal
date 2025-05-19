@@ -6,14 +6,7 @@ import { format } from 'date-fns';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 
-// In-memory store for demonstration purposes
-// In a real app, this would be a database like Firebase Firestore.
-let journalEntriesDB: JournalEntry[] = [
-  { id: '1', date: format(new Date(Date.now() - 86400000 * 2), 'yyyy-MM-dd'), sentence: 'The journey of a thousand miles begins with a single step.', userId: 'mockUser' },
-  { id: '2', date: format(new Date(Date.now() - 86400000), 'yyyy-MM-dd'), sentence: 'Embraced the quiet moments today.', userId: 'mockUser' },
-];
-
-const MOCK_USER_ID = "mockUser"; // Simulate a logged-in user
+const LOCAL_STORAGE_KEY = "journalEntries";
 
 const SentenceSchema = z.object({
   sentence: z.string().min(1, "Sentence cannot be empty.").max(500, "Sentence cannot exceed 500 characters."),
@@ -29,11 +22,20 @@ export interface FormState {
   entry?: JournalEntry;
 }
 
+function getEntriesFromLocalStorage(): JournalEntry[] {
+  if (typeof window === 'undefined') {
+    return []; // Return empty array if not in browser environment
+  }
+  const entries = localStorage.getItem(LOCAL_STORAGE_KEY);
+  return entries ? JSON.parse(entries) : [];
+}
+
 export async function addEntry(prevState: FormState, formData: FormData): Promise<FormState> {
     const todayString = format(new Date(), 'yyyy-MM-dd');
     
-    const existingEntry = journalEntriesDB.find(entry => entry.date === todayString && entry.userId === MOCK_USER_ID);
+    const existingEntry = getEntriesFromLocalStorage().find(entry => entry.date === todayString);
     if (existingEntry) {
+        // Revalidate path even if entry exists to ensure UI is up-to-date
         return { success: false, message: "An entry for today already exists.", errors: { _form: ["An entry for today already exists."]}};
     }
 
@@ -51,14 +53,19 @@ export async function addEntry(prevState: FormState, formData: FormData): Promis
     
     const { sentence } = validatedFields.data;
 
+    const currentEntries = getEntriesFromLocalStorage();
+
     const newEntry: JournalEntry = {
         id: Date.now().toString(), // Simple ID generation
         date: todayString,
         sentence,
-        userId: MOCK_USER_ID,
+        userId: "mockUser", // You might want to handle user IDs differently with local storage or remove it
     };
-    journalEntriesDB.push(newEntry);
-    journalEntriesDB.sort((a, b) => b.date.localeCompare(a.date)); // Keep sorted by date descending
+    const updatedEntries = [...currentEntries, newEntry];
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedEntries));
+    }
     
     revalidatePath('/');
     revalidatePath('/history');
@@ -68,13 +75,14 @@ export async function addEntry(prevState: FormState, formData: FormData): Promis
 
 export async function getTodaysEntry(): Promise<JournalEntry | null> {
     const todayString = format(new Date(), 'yyyy-MM-dd');
-    const entry = journalEntriesDB.find(e => e.date === todayString && e.userId === MOCK_USER_ID);
+    const entries = getEntriesFromLocalStorage();
+    const entry = entries.find(e => e.date === todayString);
     return entry || null;
 }
 
 export async function getPastEntries(): Promise<JournalEntry[]> {
     // Returns all entries sorted by date
-    return journalEntriesDB
-        .filter(entry => entry.userId === MOCK_USER_ID)
+    const entries = getEntriesFromLocalStorage();
+    return entries
         .sort((a, b) => b.date.localeCompare(a.date));
 }
